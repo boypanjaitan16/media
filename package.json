@@ -1,0 +1,118 @@
+{
+	"name": "@boyboni/media",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Associate files with Sequelize models: collections, multi-disk storage, and responsive image conversions. Inspired by spatie/laravel-medialibrary.",
+	"keywords": [
+		"sequelize",
+		"media",
+		"media-library",
+		"upload",
+		"storage",
+		"image",
+		"sharp",
+		"gcs",
+		"s3"
+	],
+	"author": "Boy Boni Panjaitan",
+	"license": "MIT",
+	"engines": {
+		"node": ">=18"
+	},
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"main": "./dist/index.js",
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"development": "./src/index.ts",
+			"import": {
+				"types": "./dist/index.d.mts",
+				"default": "./dist/index.mjs"
+			},
+			"require": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		},
+		"./storage/local": {
+			"development": "./src/storage/local.ts",
+			"import": {
+				"types": "./dist/storage/local.d.mts",
+				"default": "./dist/storage/local.mjs"
+			},
+			"require": {
+				"types": "./dist/storage/local.d.ts",
+				"default": "./dist/storage/local.js"
+			}
+		},
+		"./storage/gcs": {
+			"development": "./src/storage/gcs.ts",
+			"import": {
+				"types": "./dist/storage/gcs.d.mts",
+				"default": "./dist/storage/gcs.mjs"
+			},
+			"require": {
+				"types": "./dist/storage/gcs.d.ts",
+				"default": "./dist/storage/gcs.js"
+			}
+		},
+		"./storage/s3": {
+			"development": "./src/storage/s3.ts",
+			"import": {
+				"types": "./dist/storage/s3.d.mts",
+				"default": "./dist/storage/s3.mjs"
+			},
+			"require": {
+				"types": "./dist/storage/s3.d.ts",
+				"default": "./dist/storage/s3.js"
+			}
+		},
+		"./package.json": "./package.json"
+	},
+	"scripts": {
+		"build": "tsup",
+		"lint": "biome check ./src ./__test__",
+		"lint:fix": "biome check --write ./src ./__test__",
+		"check-types": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"peerDependencies": {
+		"@aws-sdk/client-s3": "^3.547.0",
+		"@aws-sdk/s3-request-presigner": "^3.896.0",
+		"@google-cloud/storage": "^7.19.0",
+		"sequelize": "^6.37.3",
+		"sharp": "^0.34.4"
+	},
+	"peerDependenciesMeta": {
+		"@aws-sdk/client-s3": {
+			"optional": true
+		},
+		"@aws-sdk/s3-request-presigner": {
+			"optional": true
+		},
+		"@google-cloud/storage": {
+			"optional": true
+		},
+		"sharp": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@aws-sdk/client-s3": "^3.547.0",
+		"@aws-sdk/s3-request-presigner": "^3.896.0",
+		"@google-cloud/storage": "^7.19.0",
+		"@types/node": "^24.0.1",
+		"pg": "^8.13.1",
+		"sequelize": "^6.37.3",
+		"sharp": "^0.34.4",
+		"tsup": "^8.5.0",
+		"typescript": "^5.4.5",
+		"vitest": "^4.0.9"
+	}
+}
