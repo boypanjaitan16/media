@@ -6,6 +6,7 @@ import {
 	IMMUTABLE_CACHE_CONTROL,
 	type Media,
 	type MediaCollectionDefinition,
+	MediaNotFoundError,
 	widthConversions,
 } from "../src";
 import {
@@ -64,16 +65,18 @@ const buildCarouselMedia = (overrides: Record<string, unknown> = {}) =>
 test("addMedia stores the file under the owner directory with sanitized names", async () => {
 	const { library, store, disk } = createTestLibrary();
 
-	const media = await library.addMedia(
-		{ id: "user-1", getModelType: () => "User" },
-		{
-			originalname: "KTP Saya.pdf",
-			mimetype: "application/pdf",
-			size: 4,
-			buffer: Buffer.from("%PDF"),
-		},
-		{ collection: "documents", customProperties: { source: "upload" } },
-	);
+	const media = await library
+		.addMedia(
+			{ id: "user-1", getModelType: () => "User" },
+			{
+				originalname: "KTP Saya.pdf",
+				mimetype: "application/pdf",
+				size: 4,
+				buffer: Buffer.from("%PDF"),
+			},
+		)
+		.withCustomProperties({ source: "upload" })
+		.toMediaCollection("documents");
 
 	assert.equal(media.id, 99);
 	assert.deepEqual(store.created[0], {
@@ -125,8 +128,8 @@ test("addMedia applies collection visibility, disk and the default collection", 
 		buffer: Buffer.from("x"),
 	};
 
-	await library.addMedia(user, file, { collection: "id_card" });
-	await library.add(user, file).save();
+	await library.addMedia(user, file).toMediaCollection("id_card");
+	await library.addMedia(user, file).toMediaCollection();
 
 	assert.equal(store.created[0]?.visibility, "private");
 	assert.equal(store.created[0]?.disk, "gcs");
@@ -152,11 +155,12 @@ test("addMedia honours usingFileName and never produces dot-only names", async (
 	};
 
 	await library
-		.add(carousel, file)
-		.toMediaCollection("other")
+		.addMedia(carousel, file)
 		.usingFileName("My Photo.txt")
-		.save();
-	await library.add(carousel, { ...file, originalname: ".." }).save();
+		.toMediaCollection("other");
+	await library
+		.addMedia(carousel, { ...file, originalname: ".." })
+		.toMediaCollection();
 
 	assert.equal(store.created[0]?.file_name, "my_photo.txt");
 	assert.equal(store.created[1]?.file_name, "file");
@@ -167,9 +171,9 @@ test("addMedia hashes immutable-cache file names, sets Cache-Control and generat
 		collections: BANNER_COLLECTIONS,
 	});
 
-	await library.addMedia(carousel, await pngFile("Promo Banner.png"), {
-		collection: "image_primary",
-	});
+	await library
+		.addMedia(carousel, await pngFile("Promo Banner.png"))
+		.toMediaCollection("image_primary");
 
 	const inserted = store.created[0] as { name: string; file_name: string };
 	assert.equal(inserted.name, "promo_banner");
@@ -208,9 +212,9 @@ test("addMedia keeps the upload when conversions fail", async () => {
 		collections: BANNER_COLLECTIONS,
 	});
 
-	const media = await library.addMedia(carousel, await pngFile(), {
-		collection: "image_primary",
-	});
+	const media = await library
+		.addMedia(carousel, await pngFile())
+		.toMediaCollection("image_primary");
 
 	assert.equal(media.id, 99);
 	assert.match(
@@ -237,7 +241,7 @@ test("addMedia removes the row and rethrows when the original cannot be stored",
 	});
 
 	await assert.rejects(
-		library.addMedia(carousel, await pngFile(), { collection: "other" }),
+		library.addMedia(carousel, await pngFile()).toMediaCollection("other"),
 		/did not store/,
 	);
 	assert.deepEqual(
@@ -252,7 +256,7 @@ test("addMedia removes the row and rethrows when the original cannot be stored",
 	);
 });
 
-test("addFromUrl downloads the file and names it after the URL path", async () => {
+test("addMediaFromUrl downloads the file and names it after the URL path", async () => {
 	const { library, store } = createTestLibrary();
 	const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
 		ok: true,
@@ -268,13 +272,15 @@ test("addFromUrl downloads the file and names it after the URL path", async () =
 
 	try {
 		await library
-			.addFromUrl(carousel, "https://cdn.example.com/path/photo.png?size=large")
-			.toMediaCollection("remote")
-			.save();
+			.addMediaFromUrl(
+				carousel,
+				"https://cdn.example.com/path/photo.png?size=large",
+			)
+			.toMediaCollection("remote");
 		await library
-			.addFromUrl(carousel, "https://cdn.example.com/x")
+			.addMediaFromUrl(carousel, "https://cdn.example.com/x")
 			.usingFileName("25_avatar.jpg")
-			.save();
+			.toMediaCollection();
 
 		assert.equal(
 			fetchMock.mock.calls[0]?.[0],
@@ -290,7 +296,7 @@ test("addFromUrl downloads the file and names it after the URL path", async () =
 	}
 });
 
-test("addFromUrl throws when the download fails", async () => {
+test("addMediaFromUrl throws when the download fails", async () => {
 	const { library, store } = createTestLibrary();
 	const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
 		ok: false,
@@ -301,8 +307,8 @@ test("addFromUrl throws when the download fails", async () => {
 	try {
 		await assert.rejects(
 			library
-				.addFromUrl(carousel, "https://cdn.example.com/missing.png")
-				.save(),
+				.addMediaFromUrl(carousel, "https://cdn.example.com/missing.png")
+				.toMediaCollection(),
 			/Failed to download media from URL: 404 Not Found/,
 		);
 		assert.equal(store.created.length, 0);
@@ -353,9 +359,8 @@ test("copyMedia duplicates the row, the file and its conversions", async () => {
 	);
 
 	const copied = await library
-		.copy(orderDocument, 10)
-		.toMediaCollection("id_card")
-		.save();
+		.copyMedia(orderDocument, 10)
+		.toMediaCollection("id_card");
 
 	assert.equal(copied.id, 99);
 	const { id: _id, ...attributes } = store.created[0] as Record<
@@ -419,7 +424,7 @@ test("copyMedia falls back to the path generator's fallback directories", async 
 		Buffer.from("pdf"),
 	);
 
-	await library.copyMedia(orderDocument, 10);
+	await library.copyMedia(orderDocument, 10).toMediaCollection();
 
 	assert.deepEqual(
 		disk.calls
@@ -439,7 +444,7 @@ test("copyMedia throws and cleans up when the file cannot be copied", async () =
 	});
 
 	await assert.rejects(
-		library.copyMedia(orderDocument, 10, "id_card"),
+		library.copyMedia(orderDocument, 10).toMediaCollection("id_card"),
 		/Failed to duplicate media file \[10\]/,
 	);
 	assert.deepEqual(
@@ -454,7 +459,11 @@ test("copyMedia throws and cleans up when the file cannot be copied", async () =
 test("copyMedia throws when the source does not exist", async () => {
 	const { library } = createTestLibrary();
 
-	await assert.rejects(library.copyMedia(orderDocument, 1), /Media not found/);
+	await assert.rejects(
+		library.copyMedia(orderDocument, 1).toMediaCollection(),
+		(error: unknown) =>
+			error instanceof MediaNotFoundError && error.mediaId === 1,
+	);
 });
 
 // ---------------------------------------------------------------------------
@@ -652,7 +661,7 @@ test("getMedia and getFirstMedia query by owner reference", async () => {
 		"image_gallery",
 	);
 	await library.getFirstMedia(carousel);
-	await library.findByOwnerUuid("uuid-1");
+	await library.findMedia(5);
 
 	assert.deepEqual(
 		store.calls.map((call) => [call.method, call.args]),
@@ -668,7 +677,7 @@ test("getMedia and getFirstMedia query by owner reference", async () => {
 				"findFirstForOwner",
 				[{ model_type: "Carousel", model_id: 25, model_uuid: null }, "default"],
 			],
-			["findByOwnerUuid", ["uuid-1"]],
+			["findById", [5]],
 		],
 	);
 });
@@ -770,10 +779,10 @@ test("updateCustomProperties merges into the stored JSON", async () => {
 	]);
 });
 
-test("setOrder numbers media from 1 in the given order", async () => {
+test("setNewOrder numbers media from 1 in the given order", async () => {
 	const { library, store } = createTestLibrary();
 
-	assert.equal(await library.setOrder([7, 3]), true);
+	assert.equal(await library.setNewOrder([7, 3]), true);
 	assert.deepEqual(
 		store.calls
 			.filter((call) => call.method === "update")

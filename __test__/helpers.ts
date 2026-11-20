@@ -43,10 +43,6 @@ export const createFakeStore = (
 			return media as unknown as Media;
 		}) as MediaStore["create"],
 		findById: record("findById", async () => null) as MediaStore["findById"],
-		findByOwnerUuid: record(
-			"findByOwnerUuid",
-			async () => null,
-		) as MediaStore["findByOwnerUuid"],
 		findForOwner: record(
 			"findForOwner",
 			async () => [],

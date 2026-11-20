@@ -16,10 +16,21 @@
 	],
 	"author": "Boy Boni Panjaitan",
 	"license": "MIT",
+	"homepage": "https://github.com/boypanjaitan16/media#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/boypanjaitan16/media.git"
+	},
+	"bugs": {
+		"url": "https://github.com/boypanjaitan16/media/issues"
+	},
 	"engines": {
 		"node": ">=18"
 	},
 	"sideEffects": false,
+	"publishConfig": {
+		"access": "public"
+	},
 	"files": [
 		"dist",
 		"README.md",

@@ -23,7 +23,6 @@ export interface PendingConversionQuery {
 export interface MediaStore {
 	create(attributes: MediaCreationAttributes): Promise<Media>;
 	findById(id: number): Promise<Media | null>;
-	findByOwnerUuid(uuid: string): Promise<Media | null>;
 	findForOwner(
 		owner: MediaOwnerReference,
 		collection?: string,
@@ -52,7 +51,6 @@ const BY_ORDER_COLUMN: Order = [["order_column", "ASC"]];
 export const createSequelizeMediaStore = (model: typeof Media): MediaStore => ({
 	create: (attributes) => model.create(attributes as never),
 	findById: (id) => model.findByPk(id),
-	findByOwnerUuid: (uuid) => model.findOne({ where: { model_uuid: uuid } }),
 	findForOwner: (owner, collection) =>
 		model.findAll({
 			where: ownerWhere(owner, collection),

@@ -63,6 +63,15 @@ export interface MediaCollectionDefinition {
 	 * a content hash so a re-upload never reuses a cached object key.
 	 */
 	immutableCache?: boolean;
+	/**
+	 * Keep one item per owner: after a new item is stored, the owner's other
+	 * items in this collection are deleted. A failed upload keeps the old item.
+	 */
+	singleFile?: boolean;
+	/** Accepted MIME types, exact (`image/png`) or wildcard (`image/*`). */
+	acceptsMimeTypes?: string[];
+	/** Maximum file size in bytes. */
+	maxFileSize?: number;
 }
 
 export interface AddMediaOptions {

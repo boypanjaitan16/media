@@ -2,83 +2,80 @@ import type { MediaLibrary } from "../MediaLibrary";
 import type { Media } from "../model/Media";
 import type { AddMediaOptions, MediaFile, MediaOwner } from "../types";
 
-abstract class AddMediaBuilder {
-	protected options: AddMediaOptions = {};
+type FileAdderSource =
+	| { type: "file"; file: MediaFile }
+	| { type: "url"; url: string };
 
-	toMediaCollection(name: string) {
-		this.options.collection = name;
-		return this;
-	}
+/**
+ * Collects options for a new media item. `toMediaCollection()` stores it.
+ *
+ * ```ts
+ * await media.addMedia(product, file).usingFileName("a.jpg").toMediaCollection("gallery");
+ * ```
+ */
+export class FileAdder {
+	private readonly options: Omit<AddMediaOptions, "collection"> = {};
 
-	toDisk(disk: string) {
+	/** @internal Use `MediaLibrary.addMedia` or `addMediaFromUrl`. */
+	constructor(
+		private readonly library: MediaLibrary,
+		private readonly owner: MediaOwner,
+		private readonly source: FileAdderSource,
+	) {}
+
+	/** Store on this disk instead of the collection or library default. */
+	toDisk(disk: string): this {
 		this.options.disk = disk;
 		return this;
 	}
 
-	usingFileName(name: string) {
-		this.options.fileName = name;
+	/** Store under this name instead of the original one (it is still sanitized). */
+	usingFileName(fileName: string): this {
+		this.options.fileName = fileName;
 		return this;
 	}
 
-	withCustomProperties(properties: Record<string, unknown>) {
+	withCustomProperties(properties: Record<string, unknown>): this {
 		this.options.customProperties = properties;
 		return this;
 	}
 
-	withOrder(order: number) {
+	/** Value for `order_column`. Defaults to `0`. */
+	withOrder(order: number): this {
 		this.options.order = order;
 		return this;
 	}
 
-	abstract save(): Promise<Media>;
-}
+	/** Store the file in `collection` (or the default collection) and return the saved media. */
+	toMediaCollection(collection?: string): Promise<Media> {
+		const options: AddMediaOptions = { ...this.options, collection };
 
-/** `library.add(owner, file).toMediaCollection("x").save()` */
-export class AttachMediaBuilder extends AddMediaBuilder {
-	constructor(
-		private readonly library: MediaLibrary,
-		private readonly owner: MediaOwner,
-		private readonly file: MediaFile,
-	) {
-		super();
-	}
-
-	save(): Promise<Media> {
-		return this.library.addMedia(this.owner, this.file, this.options);
+		return this.source.type === "file"
+			? this.library.storeFile(this.owner, this.source.file, options)
+			: this.library.storeFromUrl(this.owner, this.source.url, options);
 	}
 }
 
-/** `library.addFromUrl(owner, url).toMediaCollection("x").save()` */
-export class AttachMediaFromUrlBuilder extends AddMediaBuilder {
-	constructor(
-		private readonly library: MediaLibrary,
-		private readonly owner: MediaOwner,
-		private readonly url: string,
-	) {
-		super();
-	}
-
-	save(): Promise<Media> {
-		return this.library.addMediaFromUrl(this.owner, this.url, this.options);
-	}
-}
-
-/** `library.copy(owner, mediaId).toMediaCollection("x").save()` */
-export class CopyMediaBuilder {
-	private collection?: string;
-
+/**
+ * Duplicates an existing media item onto another owner.
+ *
+ * ```ts
+ * await media.copyMedia(orderDocument, mediaId).toMediaCollection("id_card");
+ * ```
+ */
+export class MediaCopier {
+	/** @internal Use `MediaLibrary.copyMedia`. */
 	constructor(
 		private readonly library: MediaLibrary,
 		private readonly owner: MediaOwner,
 		private readonly mediaId: number,
 	) {}
 
-	toMediaCollection(name: string) {
-		this.collection = name;
-		return this;
-	}
-
-	save(): Promise<Media> {
-		return this.library.copyMedia(this.owner, this.mediaId, this.collection);
+	/**
+	 * Copy into `collection`, or into the source's collection when omitted. With
+	 * a collection, the copy's file name is prefixed with `{collection}-{sourceId}-`.
+	 */
+	toMediaCollection(collection?: string): Promise<Media> {
+		return this.library.duplicate(this.owner, this.mediaId, collection);
 	}
 }

@@ -1,12 +1,15 @@
-export {
-	AttachMediaBuilder,
-	AttachMediaFromUrlBuilder,
-	CopyMediaBuilder,
-} from "./builders/builders";
+export type { FileAdder, MediaCopier } from "./builders/builders";
 export {
 	CONVERTIBLE_IMAGE_MIME_TYPES,
 	widthConversions,
 } from "./conversions/conversions";
+export {
+	MediaError,
+	MediaNotFoundError,
+	MediaValidationError,
+	type MediaValidationErrorCode,
+	type MediaValidationErrorDetails,
+} from "./errors";
 export {
 	createMediaLibrary,
 	DEFAULT_CONVERSION_MAX_ATTEMPTS,
@@ -16,8 +19,11 @@ export {
 	type RegisterOwnerOptions,
 } from "./MediaLibrary";
 export {
-	type InitMediaModelOptions,
-	initMediaModel,
+	createMediaTable,
+	dropMediaTable,
+	type MediaTableOptions,
+} from "./migrations/mediaTable";
+export {
 	Media,
 	type MediaCreationAttributes,
 	type MediaModelContext,
@@ -25,14 +31,10 @@ export {
 export {
 	createDefaultPathGenerator,
 	type DefaultPathGeneratorOptions,
-	getConversionFileName,
-	getConversionRelativePath,
 	getModelIdentifier,
 	type MediaPathSubject,
 	normalizeModelType,
 	type PathGenerator,
-	parseJsonColumn,
-	resolveConversionFileName,
 } from "./paths/mediaPath";
 export {
 	type DiskDefinition,
@@ -40,27 +42,24 @@ export {
 	type StorageManagerOptions,
 } from "./storage/StorageManager";
 export type { StorageAdapter, StoragePutOptions } from "./storage/types";
-export {
-	createSequelizeMediaStore,
-	type MediaOwnerReference,
-	type MediaStore,
-	type PendingConversionQuery,
+export type {
+	MediaOwnerReference,
+	MediaStore,
+	PendingConversionQuery,
 } from "./store/MediaStore";
-export {
-	type AddMediaOptions,
-	type MediaCollectionDefinition,
-	type MediaConversionSettings,
-	type MediaFile,
-	type MediaGeneratedConversion,
-	type MediaLogger,
-	type MediaOwner,
-	type MediaUrls,
-	type MediaVariant,
-	type MediaVisibility,
-	noopLogger,
+export type {
+	AddMediaOptions,
+	MediaCollectionDefinition,
+	MediaConversionSettings,
+	MediaFile,
+	MediaGeneratedConversion,
+	MediaLogger,
+	MediaOwner,
+	MediaUrls,
+	MediaVariant,
+	MediaVisibility,
 } from "./types";
 export {
 	hasKnownMimeSignature,
-	MIME_SIGNATURES,
 	matchesMimeSignature,
 } from "./validation/mimeSignature";

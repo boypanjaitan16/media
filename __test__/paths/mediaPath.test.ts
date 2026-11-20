@@ -8,7 +8,7 @@ import {
 	normalizeModelType,
 	parseJsonColumn,
 	resolveConversionFileName,
-} from "../../src";
+} from "../../src/paths/mediaPath";
 
 test("default path generator uses {model-type}/{owner-id}", () => {
 	const generator = createDefaultPathGenerator();

@@ -1,16 +1,13 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import type { Model, ModelStatic, Sequelize } from "sequelize";
-import {
-	AttachMediaBuilder,
-	AttachMediaFromUrlBuilder,
-	CopyMediaBuilder,
-} from "./builders/builders";
+import { FileAdder, MediaCopier } from "./builders/builders";
 import {
 	CONVERSION_CONTENT_TYPES,
 	CONVERTIBLE_IMAGE_MIME_TYPES,
 	renderConversion,
 } from "./conversions/conversions";
+import { MediaNotFoundError, MediaValidationError } from "./errors";
 import {
 	initMediaModel,
 	Media,
@@ -108,6 +105,19 @@ const toOwnerReference = (owner: MediaOwner): MediaOwnerReference => {
 		model_uuid: isNumericId ? null : String(owner.id),
 	};
 };
+
+/** `image/jpeg; charset=binary` → `image/jpeg` */
+const normalizeMimeType = (mimeType: string) =>
+	mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+
+const acceptsMimeType = (accepted: string[], mimeType: string) =>
+	accepted.some((pattern) => {
+		const normalized = normalizeMimeType(pattern);
+
+		return normalized.endsWith("/*")
+			? mimeType.startsWith(normalized.slice(0, -1))
+			: normalized === mimeType;
+	});
 
 const fileNameFromUrl = (url: string) => {
 	try {
@@ -269,20 +279,77 @@ export class MediaLibrary {
 	// Adding media
 	// ---------------------------------------------------------------------------
 
-	add(owner: MediaOwner, file: MediaFile): AttachMediaBuilder {
-		return new AttachMediaBuilder(this, owner, file);
+	/**
+	 * Start adding `file` (an in-memory upload) to `owner`.
+	 *
+	 * ```ts
+	 * await media.addMedia(product, file).toMediaCollection("gallery");
+	 * ```
+	 */
+	addMedia(owner: MediaOwner, file: MediaFile): FileAdder {
+		return new FileAdder(this, owner, { type: "file", file });
 	}
 
-	addFromUrl(owner: MediaOwner, url: string): AttachMediaFromUrlBuilder {
-		return new AttachMediaFromUrlBuilder(this, owner, url);
+	/**
+	 * Start adding the file at `url` to `owner`. Only pass URLs you trust: the
+	 * library downloads whatever it is given.
+	 */
+	addMediaFromUrl(owner: MediaOwner, url: string): FileAdder {
+		return new FileAdder(this, owner, { type: "url", url });
 	}
 
-	copy(owner: MediaOwner, mediaId: number): CopyMediaBuilder {
-		return new CopyMediaBuilder(this, owner, mediaId);
+	/** Start copying media `mediaId` (file and conversions) onto `owner`. */
+	copyMedia(owner: MediaOwner, mediaId: number): MediaCopier {
+		return new MediaCopier(this, owner, mediaId);
 	}
 
-	/** Store `file` for `owner` and generate its registered conversions. */
-	async addMedia(
+	/**
+	 * Check `file` against the rules of its target collection.
+	 * @throws {MediaValidationError}
+	 */
+	validateFile(
+		modelType: string,
+		collection: string,
+		file: { mimetype: string; size?: number },
+	): void {
+		const definition = this.getCollection(modelType, collection);
+		if (!definition) return;
+
+		const mimeType = normalizeMimeType(file.mimetype);
+		const { acceptsMimeTypes, maxFileSize } = definition;
+
+		if (acceptsMimeTypes && !acceptsMimeType(acceptsMimeTypes, mimeType)) {
+			throw new MediaValidationError({
+				code: "MIME_TYPE_NOT_ACCEPTED",
+				modelType,
+				collection,
+				mimeType,
+				size: file.size,
+				acceptsMimeTypes,
+			});
+		}
+
+		if (
+			maxFileSize !== undefined &&
+			file.size !== undefined &&
+			file.size > maxFileSize
+		) {
+			throw new MediaValidationError({
+				code: "FILE_TOO_LARGE",
+				modelType,
+				collection,
+				mimeType,
+				size: file.size,
+				maxFileSize,
+			});
+		}
+	}
+
+	/**
+	 * Store `file` for `owner` and generate its registered conversions.
+	 * @internal Use `addMedia(owner, file).toMediaCollection(name)`.
+	 */
+	async storeFile(
 		owner: MediaOwner,
 		file: MediaFile,
 		options: AddMediaOptions = {},
@@ -295,6 +362,9 @@ export class MediaLibrary {
 			options.disk ?? definition?.disk ?? this.storage.defaultDiskName;
 		const visibility = definition?.visibility ?? "public";
 
+		this.validateFile(modelType, collection, file);
+
+		let media: Media;
 		try {
 			const sanitizedFileName = sanitizeFileName(
 				options.fileName ?? file.originalname,
@@ -303,7 +373,7 @@ export class MediaLibrary {
 				? withContentHash(sanitizedFileName, file.buffer)
 				: sanitizedFileName;
 
-			const media = await this.store.create({
+			media = await this.store.create({
 				...ownerReference,
 				collection_name: collection,
 				name: path.parse(sanitizedFileName).name,
@@ -342,8 +412,6 @@ export class MediaLibrary {
 			// Generate variants inline so caches invalidated right after the upload
 			// already see them; failures are recorded for a later retry.
 			await this.generateConversions(media, file.buffer);
-
-			return media;
 		} catch (error) {
 			this.logger.error(
 				`Failed to add media for [${modelType}] [${owner.id}]`,
@@ -352,17 +420,23 @@ export class MediaLibrary {
 
 			throw error;
 		}
+
+		await this.applySingleFile(ownerReference, media);
+
+		return media;
 	}
 
 	/**
-	 * Download `url` and store it for `owner`. Only pass URLs you trust: the
-	 * library fetches whatever it is given.
+	 * Download `url` and store it for `owner`.
+	 * @internal Use `addMediaFromUrl(owner, url).toMediaCollection(name)`.
 	 */
-	async addMediaFromUrl(
+	async storeFromUrl(
 		owner: MediaOwner,
 		url: string,
 		options: AddMediaOptions = {},
 	): Promise<Media> {
+		const modelType = owner.getModelType();
+		const collection = options.collection ?? this.defaultCollection;
 		const response = await fetch(url);
 
 		if (!response.ok) {
@@ -371,16 +445,34 @@ export class MediaLibrary {
 			);
 		}
 
+		const mimetype = normalizeMimeType(
+			response.headers.get("content-type") || "application/octet-stream",
+		);
+		const declaredSize = Number(response.headers.get("content-length"));
+
+		// Reject before downloading the body when the headers already rule it out
+		try {
+			this.validateFile(modelType, collection, {
+				mimetype,
+				size:
+					Number.isFinite(declaredSize) && declaredSize > 0
+						? declaredSize
+						: undefined,
+			});
+		} catch (error) {
+			await response.body?.cancel().catch(() => undefined);
+			throw error;
+		}
+
 		const buffer = Buffer.from(await response.arrayBuffer());
 
-		return this.addMedia(
+		return this.storeFile(
 			owner,
 			{
 				fieldname: "file",
 				originalname: options.fileName ?? fileNameFromUrl(url),
 				encoding: "7bit",
-				mimetype:
-					response.headers.get("content-type") || "application/octet-stream",
+				mimetype,
 				size: buffer.length,
 				buffer,
 			},
@@ -390,21 +482,27 @@ export class MediaLibrary {
 
 	/**
 	 * Duplicate an existing media item (file and conversions) onto `owner`.
-	 * With `collectionName`, the copy moves to that collection and its file name
-	 * is prefixed with `{collection}-{sourceId}-`.
+	 * @internal Use `copyMedia(owner, mediaId).toMediaCollection(name)`.
 	 */
-	async copyMedia(
+	async duplicate(
 		owner: MediaOwner,
 		mediaId: number,
 		collectionName?: string,
 	): Promise<Media> {
 		const source = await this.store.findById(mediaId);
 		if (!source) {
-			throw new Error("Media not found");
+			throw new MediaNotFoundError(mediaId);
 		}
 
+		const ownerReference = toOwnerReference(owner);
+		this.validateFile(
+			ownerReference.model_type,
+			collectionName || source.collection_name,
+			{ mimetype: source.mime_type ?? "", size: source.size },
+		);
+
 		const duplicated = await this.store.create({
-			...toOwnerReference(owner),
+			...ownerReference,
 			collection_name: collectionName || source.collection_name,
 			name: source.name,
 			file_name: collectionName
@@ -470,7 +568,39 @@ export class MediaLibrary {
 			);
 		}
 
+		await this.applySingleFile(ownerReference, duplicated);
+
 		return duplicated;
+	}
+
+	/** Delete the other items of a `singleFile` collection once `media` is stored. */
+	private async applySingleFile(
+		owner: MediaOwnerReference,
+		media: Media,
+	): Promise<void> {
+		if (
+			!this.getCollection(owner.model_type, media.collection_name)?.singleFile
+		) {
+			return;
+		}
+
+		try {
+			const siblings = await this.store.findForOwner(
+				owner,
+				media.collection_name,
+			);
+
+			for (const sibling of siblings) {
+				if (sibling.id !== media.id) {
+					await this.deleteMedia(sibling);
+				}
+			}
+		} catch (error) {
+			this.logger.error(
+				`Failed to remove previous media of single-file collection [${media.collection_name}] for media [${media.id}]`,
+				error,
+			);
+		}
 	}
 
 	// ---------------------------------------------------------------------------
@@ -643,13 +773,8 @@ export class MediaLibrary {
 		return this.store.findFirstForOwner(toOwnerReference(owner), collection);
 	}
 
-	findById(mediaId: number): Promise<Media | null> {
+	findMedia(mediaId: number): Promise<Media | null> {
 		return this.store.findById(mediaId);
-	}
-
-	/** First media whose owner key (`model_uuid`) is `uuid`. */
-	findByOwnerUuid(uuid: string): Promise<Media | null> {
-		return this.store.findByOwnerUuid(uuid);
 	}
 
 	// ---------------------------------------------------------------------------
@@ -750,7 +875,7 @@ export class MediaLibrary {
 	}
 
 	/** Set `order_column` to 1..n following the order of `mediaIds`. */
-	async setOrder(mediaIds: number[]): Promise<boolean> {
+	async setNewOrder(mediaIds: number[]): Promise<boolean> {
 		try {
 			for (const [index, mediaId] of mediaIds.entries()) {
 				await this.store.update(mediaId, { order_column: index + 1 });
