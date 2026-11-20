@@ -12,7 +12,7 @@ export default defineConfig({
 	dts: true,
 	clean: !process.argv.includes("--watch"),
 	sourcemap: true,
-	target: "node18",
+	target: "node20",
 	// Peer SDKs are loaded lazily at runtime and must never be bundled.
 	external: [
 		"sequelize",

@@ -1,7 +1,6 @@
 {
 	"name": "@boyboni/media",
 	"version": "0.1.0",
-	"private": true,
 	"description": "Associate files with Sequelize models: collections, multi-disk storage, and responsive image conversions. Inspired by spatie/laravel-medialibrary.",
 	"keywords": [
 		"sequelize",
@@ -25,7 +24,7 @@
 		"url": "https://github.com/boypanjaitan16/media/issues"
 	},
 	"engines": {
-		"node": ">=18"
+		"node": ">=20"
 	},
 	"sideEffects": false,
 	"publishConfig": {
@@ -41,7 +40,6 @@
 	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
-			"development": "./src/index.ts",
 			"import": {
 				"types": "./dist/index.d.mts",
 				"default": "./dist/index.mjs"
@@ -52,7 +50,6 @@
 			}
 		},
 		"./storage/local": {
-			"development": "./src/storage/local.ts",
 			"import": {
 				"types": "./dist/storage/local.d.mts",
 				"default": "./dist/storage/local.mjs"
@@ -63,7 +60,6 @@
 			}
 		},
 		"./storage/gcs": {
-			"development": "./src/storage/gcs.ts",
 			"import": {
 				"types": "./dist/storage/gcs.d.mts",
 				"default": "./dist/storage/gcs.mjs"
@@ -74,7 +70,6 @@
 			}
 		},
 		"./storage/s3": {
-			"development": "./src/storage/s3.ts",
 			"import": {
 				"types": "./dist/storage/s3.d.mts",
 				"default": "./dist/storage/s3.mjs"
@@ -88,10 +83,11 @@
 	},
 	"scripts": {
 		"build": "tsup",
-		"lint": "biome check ./src ./__test__",
-		"lint:fix": "biome check --write ./src ./__test__",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
 		"check-types": "tsc --noEmit",
-		"test": "vitest run"
+		"test": "vitest run",
+		"prepublishOnly": "tsup"
 	},
 	"peerDependencies": {
 		"@aws-sdk/client-s3": "^3.547.0",
@@ -117,6 +113,7 @@
 	"devDependencies": {
 		"@aws-sdk/client-s3": "^3.547.0",
 		"@aws-sdk/s3-request-presigner": "^3.896.0",
+		"@biomejs/biome": "2.4.14",
 		"@google-cloud/storage": "^7.19.0",
 		"@types/node": "^24.0.1",
 		"pg": "^8.13.1",
@@ -125,5 +122,6 @@
 		"tsup": "^8.5.0",
 		"typescript": "^5.4.5",
 		"vitest": "^4.0.9"
-	}
+	},
+	"packageManager": "pnpm@9.0.0"
 }

@@ -1,5 +1,9 @@
 # @boyboni/media
 
+[![npm](https://img.shields.io/npm/v/@boyboni/media)](https://www.npmjs.com/package/@boyboni/media)
+[![CI](https://github.com/boypanjaitan16/media/actions/workflows/ci.yml/badge.svg)](https://github.com/boypanjaitan16/media/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/@boyboni/media)](LICENSE)
+
 Attach files to your [Sequelize](https://sequelize.org) models. Files are grouped in named collections and stored on pluggable disks: local filesystem, Google Cloud Storage, or anything S3-compatible. Images can also get responsive conversions made with [sharp](https://sharp.pixelplumbing.com).
 
 Inspired by [spatie/laravel-medialibrary](https://github.com/spatie/laravel-medialibrary).
@@ -37,7 +41,7 @@ npm install @google-cloud/storage                              # gcs disk
 npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner   # s3 disk
 ```
 
-Requires Node.js 18 or later and Sequelize 6.
+Requires Node.js 20 or later and Sequelize 6.
 
 ## Create the table
 
@@ -241,6 +245,15 @@ if (!matchesMimeSignature(file.buffer, file.mimetype)) {
 }
 ```
 
+## Contributing
+
+Issues and pull requests are welcome. Use [Conventional Commits](https://www.conventionalcommits.org) for commit messages; releases and the changelog are generated from them.
+
+```sh
+pnpm install
+pnpm run lint && pnpm run check-types && pnpm test && pnpm run build
+```
+
 ## License
 
-MIT
+[MIT](LICENSE)
